@@ -4,6 +4,7 @@ import argparse
 import sys
 import time
 import requests
+import ipaddress
 from termcolor import colored
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -12,7 +13,7 @@ logo = """
  /_  __/ ____/ __ \/   /__  / 
   / / / __/ / /_/ / /| | / / 
  / / / /___/ _, _/ ___ |/ /__ 
-/_/ /_____/_/ |_/_/  |_/____/ v1.0
+/_/ /_____/_/ |_/_/  |_/____/ v1.2
          By github.com/bimantaraz
 """
 
@@ -31,9 +32,10 @@ class OriginReaper:
         if not domain:
             raise ValueError("Domain cannot be null or empty.")
         self.domain = domain
-        self.results = set()
-        self.cloudflare_ips = self._fetch_cloudflare_ips()
-        print(colored(f"[INFO] Loaded {len(self.cloudflare_ips)} Cloudflare IP ranges.", "cyan", attrs=["bold"]))
+        self.real_ips = set()
+        self.cf_ips = set()
+        self.cloudflare_networks = self._fetch_cloudflare_ips()
+        print(colored(f"[INFO] Loaded {len(self.cloudflare_networks)} Cloudflare IP ranges.", "cyan", attrs=["bold"]))
 
     def _fetch_cloudflare_ips(self):
         try:
@@ -41,29 +43,52 @@ class OriginReaper:
             v6_response = requests.get("https://www.cloudflare.com/ips-v6", timeout=10)
             v4_response.raise_for_status()
             v6_response.raise_for_status()
-            return set(v4_response.text.splitlines() + v6_response.text.splitlines())
+            lines = v4_response.text.splitlines() + v6_response.text.splitlines()
+            networks = []
+            for line in lines:
+                line = line.strip()
+                if line:
+                    networks.append(ipaddress.ip_network(line))
+            return networks
         except requests.exceptions.RequestException as e:
             print(colored(f"[ERROR] Could not fetch Cloudflare IP ranges: {e}", "red"))
-            return set()
+            return []
+        except ValueError as e:
+            print(colored(f"[ERROR] Invalid CIDR in Cloudflare IPs: {e}", "red"))
+            return []
 
-    def _is_cloudflare_ip(self, ip):
-        for cidr in self.cloudflare_ips:
-            if ip in cidr:
-                return True
+    def _is_cloudflare_ip(self, ip_str):
         try:
-            domain_ips = set([str(i[4][0]) for i in socket.getaddrinfo(self.domain, None)])
+            ip_obj = ipaddress.ip_address(ip_str)
+            for net in self.cloudflare_networks:
+                if ip_obj in net:
+                    return True
+        except ValueError:
+            pass
+        return False
+
+    def is_domain_cloudflare(self, domain_str):
+        try:
+            domain_ips = set([str(i[4][0]) for i in socket.getaddrinfo(domain_str, None)])
             for dip in domain_ips:
-                for cidr in self.cloudflare_ips:
-                    if dip in cidr or any(dip in ip_range for ip_range in self.cloudflare_ips):
-                        return True
-            return False
+                if self._is_cloudflare_ip(dip):
+                    return True
         except socket.gaierror:
-            return False
+            pass
+        return False
 
     def _add_result(self, ip):
-        if ip and ip not in self.results and not self._is_cloudflare_ip(ip):
+        if not ip:
+            return
+        if ip in self.real_ips or ip in self.cf_ips:
+            return
+
+        if self._is_cloudflare_ip(ip):
+            print(colored(f"  [-] IP {ip} is a Cloudflare IP. Ignoring.", "yellow"))
+            self.cf_ips.add(ip)
+        else:
             print(colored(f"[SUCCESS] Potential Origin IP Found: {ip}", "green", attrs=['bold']))
-            self.results.add(ip)
+            self.real_ips.add(ip)
 
     def scan_subdomains(self):
         print(colored("\n[PHASE 1] Commencing Subdomain Enumeration...", "yellow", attrs=["bold"]))
@@ -103,17 +128,22 @@ class OriginReaper:
 
     def run(self):
         print(colored(f"\n--- Initiating Reconnaissance for {self.domain} ---", "white", attrs=["bold"]))
-        if not self._is_cloudflare_ip(self.domain):
+        if not self.is_domain_cloudflare(self.domain):
             print(colored(f"[WARNING] {self.domain} does not appear to be protected by Cloudflare. Direct resolution may be possible.", "magenta"))
 
         self.scan_subdomains()
         self.check_mx_records()
 
         print(colored("\n--- Reconnaissance Complete ---", "white", attrs=["bold"]))
-        if self.results:
-            print(colored("\nFound the following potential origin IPs:", "green", attrs=["bold"]))
-            for ip in self.results:
+        if self.real_ips:
+            print(colored("\n[+] Found the following potential origin IPs:", "green", attrs=["bold"]))
+            for ip in self.real_ips:
                 print(colored(f"  -> {ip}", "green", attrs=['bold']))
+        elif self.cf_ips:
+            print(colored("\n[-] Could not find the real origin IP.", "red", attrs=["bold"]))
+            print(colored("All discovered IPs are protected by Cloudflare:", "yellow"))
+            for ip in self.cf_ips:
+                print(colored(f"  -> {ip}", "yellow"))
         else:
             print(colored("Mission concluded. No origin IPs discovered through these vectors.", "red", attrs=["bold"]))
 

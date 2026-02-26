@@ -83,34 +83,47 @@ This script will display the detected IPs in the terminal. You can also choose t
 
 * **Subdomain Enumeration**: Enumerates common subdomains through DNS queries.
 * **MX Record Checking**: Analyzes MX records to find IPs related to mail servers.
-* **Cloudflare IP Check**: Avoids IPs associated with Cloudflare to discover unprotected origin IPs.
-* **Formatted Output**: Results are printed with colors and organized tables for easy visualization.
+* **Cloudflare IP Check**: Verifies discovered IPs against the official Cloudflare IP ranges using precise CIDR matching to accurately identify and ignore Cloudflare IPs.
+* **Formatted Output**: Results are printed with colors and separates potential Origin IPs from Cloudflare-protected IPs.
 
-### Example Output:
+### Example Output (When Real IPs are Found):
 
 ```
   ________________  ___ _____ 
  /_  __/ ____/ __ \/   /__  / 
   / / / __/ / /_/ / /| | / / 
  / / / /___/ _, _/ ___ |/ /__ 
-/_/ /_____/_/ |_/_/  |_/____/ v1.0
+/_/ /_____/_/ |_/_/  |_/____/ v1.2
          By github.com/bimantaraz
 
-[INFO] Loaded 20 Cloudflare IP ranges.
+[INFO] Loaded 22 Cloudflare IP ranges.
+
 --- Initiating Reconnaissance for example.com ---
-[INFO] Loaded 20 Cloudflare IP ranges.
+
 [PHASE 1] Commencing Subdomain Enumeration...
   [~] Testing mail.example.com -> 182.168.1.1
   [SUCCESS] Potential Origin IP Found: 182.168.1.1
-  [~] Testing api.example.com -> 182.168.1.2
-  [SUCCESS] Potential Origin IP Found: 182.168.1.2
+  [~] Testing api.example.com -> 104.21.82.74
+  [-] IP 104.21.82.74 is a Cloudflare IP. Ignoring.
 
 [PHASE 2] Analyzing MX Records...
   [~] Found MX record: mail.example.com
   [SUCCESS] Potential Origin IP Found: 182.168.1.1
 
 --- Reconnaissance Complete ---
-Found the following potential origin IPs:
+
+[+] Found the following potential origin IPs:
   -> 182.168.1.1
-  -> 182.168.1.2
 ```
+
+### Example Output (When Only Cloudflare IPs are Discovered):
+
+```
+--- Reconnaissance Complete ---
+
+[-] Could not find the real origin IP.
+All discovered IPs are protected by Cloudflare:
+  -> 104.21.82.74
+  -> 172.67.154.131
+```
+
