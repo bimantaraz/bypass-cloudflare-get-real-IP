@@ -1,129 +1,164 @@
 # bypass-cloudflare-get-origin-IP
-A tool designed to help you bypass Cloudflare protection and find the origin IP of a protected domain. This tool uses various subdomain enumeration, DNS lookup, and MX check techniques to detect the origin IP address connecting to a server, even if the domain is protected by Cloudflare.
+
+An advanced OSINT reconnaissance tool designed to bypass Cloudflare protection and uncover the real origin IP of a protected domain.
+
+This tool employs multiple detection vectors—including Certificate Transparency (crt.sh), SPF/TXT record IP extraction, multi-threaded subdomain enumeration, and MX record analysis—coupled with active origin validation (SSL certificate SAN matching and direct HTTP Host Header probing) to minimize false positives.
 
 ---
 
-### Steps to Install and Run the Script
+### Key Features
 
-**1. Prepare the Python Environment:**
-Make sure you have Python 3.6 or newer installed on your system.
-
-* **Install Python 3.x**: You can download it from [python.org](https://www.python.org/downloads/).
-
-**2. Clone the GitHub Repository or Download the Script:**
-
-* If you want to download directly from GitHub, you can clone the repository using the command:
-
-  ```bash
-  git clone https://github.com/bimantaraz/bypass-cloudflare-get-origin-IP.git
-  ```
-
-**3. Install Dependencies:**
-This tool requires several external libraries. You can install them using `pip` (Python package manager).
-
-* Open a terminal or command prompt.
-* Install the required libraries with the following command:
-
-  ```bash
-  pip install -r requirements.txt
-  ```
-
-**4. Running the Script:**
-Once all dependencies are installed, you can run the script to start subdomain enumeration and find origin IPs behind Cloudflare.
-
-* Open a terminal or command prompt.
-* Navigate to the directory where the script file is saved.
-* Run the following command:
-
-  ```bash
-  python teraz.py <domain>
-  ```
-
-  Replace `<domain>` with the domain name you want to analyze. For example:
-
-  ```bash
-  python teraz.py example.com
-  ```
-
-**5. Running with Custom Options:**
-If you want to customize the list of subdomains or the type of DNS you want to query, you can add several optional arguments.
-
-Some example commands with additional options:
-
-* **Specify custom subdomains**:
-
-  ```bash
-  python teraz.py example.com --subdomains ftp mail api
-  ```
-
-* **Specify the DNS types to search for (A, MX, TXT, etc.)**:
-
-  ```bash
-  python teraz.py example.com --dns-types A MX
-  ```
-
-* **Use more threads to speed up the search**:
-
-  ```bash
-  python teraz.py example.com --max-workers 20
-  ```
-
-* **Save the results to a JSON file**:
-
-  ```bash
-  python teraz.py example.com --output results.json
-  ```
-
-**6. Viewing Results:**
-This script will display the detected IPs in the terminal. You can also choose to save the results in JSON format for further analysis if you add the `--output` option.
+* **Certificate Transparency (crt.sh)**: Automatically queries public SSL/TLS certificate logs to discover active and historical subdomains without needing any API key.
+* **SPF & TXT Record Extraction**: Extracts IPv4 and IPv6 addresses configured in email SPF records (`v=spf1 ...`), which frequently leak origin server IPs.
+* **Multi-Threaded Subdomain Enumeration**: Fast concurrent DNS resolution with support for external wordlists.
+* **MX Record Checking**: Analyzes Mail Exchange records and resolves mail server IPs.
+* **Origin Verification & Anti-False Positive (Active Probing)**:
+  * Probes candidate IPs directly with `Host: <domain>` headers.
+  * Compares HTML title and status codes against baseline target signatures.
+  * Inspects SSL/TLS certificates on port 443 to match Subject Alternative Names (SAN) and Common Names (CN).
+  * Classifies results with high-confidence tags (`[CONFIRMED ORIGIN]`).
+* **Precise Cloudflare CIDR Filtering**: Dynamically fetches official Cloudflare IPv4 & IPv6 ranges and performs CIDR subnet matching.
+* **JSON & TXT Export**: Easily export structured scan results for reports, automation, and tooling integration.
+* **Custom DNS Resolver**: Bypass local ISP DNS filtering or caching by specifying custom resolvers (e.g., `1.1.1.1`, `8.8.8.8`).
 
 ---
 
-### Key Features:
+### Installation
 
-* **Subdomain Enumeration**: Enumerates common subdomains through DNS queries.
-* **MX Record Checking**: Analyzes MX records to find IPs related to mail servers.
-* **Cloudflare IP Check**: Verifies discovered IPs against the official Cloudflare IP ranges using precise CIDR matching to accurately identify and ignore Cloudflare IPs.
-* **Formatted Output**: Results are printed with colors and separates potential Origin IPs from Cloudflare-protected IPs.
+1. **Prerequisites**: Python 3.8 or newer.
+2. **Clone the Repository**:
+   ```bash
+   git clone https://github.com/bimantaraz/bypass-cloudflare-get-origin-IP.git
+   cd bypass-cloudflare-get-origin-IP
+   ```
+3. **Install Dependencies**:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-### Example Output (When Real IPs are Found):
+---
 
+### Usage
+
+#### Basic Scan
+```bash
+python teraz.py example.com
 ```
+
+#### Advanced Options & Examples
+
+* **Save results to JSON or TXT file**:
+  ```bash
+  python teraz.py example.com -o results.json
+  python teraz.py example.com -o report.txt
+  ```
+
+* **Use a custom subdomain wordlist**:
+  ```bash
+  python teraz.py example.com -w subdomains-top1000.txt
+  ```
+
+* **Use a custom DNS resolver (e.g. Cloudflare DNS or Google DNS)**:
+  ```bash
+  python teraz.py example.com -r 1.1.1.1
+  ```
+
+* **Adjust worker threads for faster scanning**:
+  ```bash
+  python teraz.py example.com -t 30
+  ```
+
+* **Specify DNS record types**:
+  ```bash
+  python teraz.py example.com --dns-types A MX TXT
+  ```
+
+* **Disable Certificate Transparency (crt.sh) query (offline / fast mode)**:
+  ```bash
+  python teraz.py example.com --no-crt
+  ```
+
+* **Disable active HTTP/SSL Origin verification**:
+  ```bash
+  python teraz.py example.com --no-probe
+  ```
+
+* **Enable verbose logging**:
+  ```bash
+  python teraz.py example.com -v
+  ```
+
+---
+
+### Command-Line Arguments Reference
+
+| Argument | Short | Description | Default |
+| :--- | :--- | :--- | :--- |
+| `domain` | - | Target domain to scan (e.g., `example.com`) | *Required* |
+| `--wordlist` | `-w` | Path to custom subdomain wordlist file | `None` |
+| `--max-workers`| `-t` | Number of concurrent worker threads | `15` |
+| `--resolver` | `-r` | Custom DNS resolver IP (e.g. `1.1.1.1`, `8.8.8.8`) | System default |
+| `--output` | `-o` | Output file path (`.json` or `.txt`) | `None` |
+| `--dns-types` | - | DNS record types to inspect (`A`, `MX`, `TXT`) | `A MX TXT` |
+| `--no-crt` | - | Disable Certificate Transparency lookup | `False` |
+| `--no-probe` | - | Disable active HTTP/SSL verification | `False` |
+| `--verbose` | `-v` | Enable verbose logging | `False` |
+
+---
+
+### Example Output
+
+```text
   ________________  ___ _____ 
  /_  __/ ____/ __ \/   /__  / 
   / / / __/ / /_/ / /| | / / 
  / / / /___/ _, _/ ___ |/ /__ 
-/_/ /_____/_/ |_/_/  |_/____/ v1.2
+/_/ /_____/_/ |_/_/  |_/____/ v2.0 - Pro Recon Edition
          By github.com/bimantaraz
 
-[INFO] Loaded 22 Cloudflare IP ranges.
+[INFO] Loaded 22 official Cloudflare IP ranges.
 
 --- Initiating Reconnaissance for example.com ---
+[INFO] Confirmed: example.com is protected by Cloudflare.
 
-[PHASE 1] Commencing Subdomain Enumeration...
-  [~] Testing mail.example.com -> 182.168.1.1
-  [SUCCESS] Potential Origin IP Found: 182.168.1.1
-  [~] Testing api.example.com -> 104.21.82.74
-  [-] IP 104.21.82.74 is a Cloudflare IP. Ignoring.
+[PHASE 1] Querying Certificate Transparency (crt.sh)...
+  [+] crt.sh discovered 14 unique subdomains.
 
-[PHASE 2] Analyzing MX Records...
+[PHASE 2] Analyzing SPF & TXT Records for Origin IPs...
+  [~] Found SPF Record: v=spf1 ip4:198.51.100.25 include:_spf.google.com ~all
+  [+] [SUCCESS] Potential Origin IP Found: 198.51.100.25 (Source: SPF Record (Direct IP))
+
+[PHASE 3] Analyzing MX Records...
   [~] Found MX record: mail.example.com
-  [SUCCESS] Potential Origin IP Found: 182.168.1.1
+  [+] [SUCCESS] Potential Origin IP Found: 198.51.100.26 (Source: MX Host (mail.example.com))
 
---- Reconnaissance Complete ---
+[PHASE 4] Commencing Subdomain Enumeration...
+  [INFO] Scanning 75 subdomains with 15 threads...
+  [-] IP 104.21.82.74 is protected by Cloudflare. (Found via: Subdomain: api.example.com)
+  [+] [SUCCESS] Potential Origin IP Found: 198.51.100.27 (Source: Subdomain: direct.example.com)
 
-[+] Found the following potential origin IPs:
-  -> 182.168.1.1
+[PHASE 5] Probing Potential Origin IPs (SSL & HTTP Host Header Match)...
+  [★★★ CONFIRMED ORIGIN] -> 198.51.100.25
+      - SSL Certificate SAN matched domain: ['example.com', '*.example.com']
+      - HTML Title matched target website: 'Example Portal'
+  [?] Candidate -> 198.51.100.26 (HTTP Status: 200, Title: 'Webmail Login')
+
+==================================================
+           RECONNAISSANCE COMPLETE
+==================================================
+
+[★★★] CONFIRMED ORIGIN IPs FOUND:
+  -> 198.51.100.25 [CONFIRMED] (Discovered via: SPF Record (Direct IP))
+
+[+] POTENTIAL ORIGIN IPs (Non-Cloudflare):
+  -> 198.51.100.26 (Discovered via: MX Host (mail.example.com))
+  -> 198.51.100.27 (Discovered via: Subdomain: direct.example.com)
+
+[INFO] Saving scan results to results.json...
+[SUCCESS] Results successfully written to results.json
 ```
 
-### Example Output (When Only Cloudflare IPs are Discovered):
+---
 
-```
---- Reconnaissance Complete ---
-
-[-] Could not find the real origin IP.
-All discovered IPs are protected by Cloudflare:
-  -> 104.21.82.74
-  -> 172.67.154.131
-```
-
+### License
+This project is licensed under the [MIT License](LICENSE).

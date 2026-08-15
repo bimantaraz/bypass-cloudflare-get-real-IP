@@ -1,3 +1,4 @@
-dnspython
-requests
-termcolor
+dnspython>=2.3.0
+requests>=2.28.0
+termcolor>=2.0.0
+urllib3>=2.0.0
